@@ -3,6 +3,7 @@
 #include <Adafruit_PCD8544.h>
 #include <EEPROMStore.h>
 #include <TimerOne.h>
+#include <MotoPanel.h>
 
 EEPROMStore store = EEPROMStore();
 
@@ -17,88 +18,14 @@ EEPROMStore store = EEPROMStore();
 // and written to during SPI transfer.  Be careful sharing these pins!
 Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 3);
 
-void drawSpeed(int spd)
-{
-  static int last_spd = -1;
-  if (spd == last_spd)
-    return;
+MotoPanel panel = MotoPanel(display);
 
-  display.setTextSize(4);
-  display.setTextColor(BLACK);
-  display.setCursor(24, 10);
-  display.print(spd, DEC);
-  last_spd = spd;
-  display.display();
-}
-
-void drawMileage(int mileage)
-{
-  static int last_mileage = -1;
-  int x = mileage;
-  if (last_mileage == mileage)
-    return;
-
-  display.setTextSize(1);
-  display.setTextColor(BLACK);
-  display.setCursor(24, 40);
-  int digit = mileage / 1000000;
-  x -= digit * 1000000;
-  display.print(digit, DEC);
-  digit = x / 100000;
-  x -= digit * 100000;
-  display.print(digit, DEC);
-  digit = x / 10000;
-  x -= digit * 10000;
-  display.print(digit, DEC);
-  digit = x / 1000;
-  x -= digit * 1000;
-  display.print(digit, DEC);
-  digit = x / 100;
-  x -= digit * 100;
-  display.print(digit, DEC);
-  digit = x / 10;
-  x -= digit * 10;
-  display.print(digit, DEC);
-  display.print(".");
-  display.print(x, DEC);
-  last_mileage = mileage;
-  display.display();
-}
-
-void drawRPM(int rpm)
-{
-  static int last_rpm = -1;
-  if (last_rpm == rpm)
-    return;
-
-  long rpm_range = store.rpmRange();
-  Serial.print("rpm range:");
-  Serial.println(rpm_range, DEC);
-  int delta = rpm / (rpm_range/(47 - 12));
-  int triy = 47 - delta;
-  int trix = rpm / (rpm_range/10);
-  Serial.print("rpm tri:");
-  Serial.print(trix, DEC);
-  Serial.print(",");
-  Serial.println(triy, DEC);
-  display.fillTriangle(0, 47, 0, triy, trix, triy, BLACK);
-  display.drawLine(0, triy, 0, 12, BLACK);
-  display.drawLine(0, 12, 10, 12, BLACK);
-  display.drawLine(10, 12, trix, triy, BLACK); 
-  
-  display.setTextSize(1);
-  display.setTextColor(BLACK);
-  display.setCursor(1, 1);
-  display.print(rpm, DEC);
-  last_rpm = rpm;
-  display.display();
-}
+// flag to signal each second
+volatile bool g_1_hz = false;
 
 void everySecond()
 {
-  Serial.println("second");
-  store.writeMileage();
-  drawMileage(store.mileage());
+  g_1_hz = true;
 }
 
 void setup() {
@@ -106,9 +33,11 @@ void setup() {
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
+
   // initialize the state from EEPROM store
   store.begin();
 
+  // setup the lcd display
   display.begin();
   // you can change the contrast around to adapt the display
   // for the best viewing!
@@ -118,14 +47,26 @@ void setup() {
   // setup timer
   Timer1.initialize(1000000);
   Timer1.attachInterrupt(everySecond);
+
+  // panel
+  panel.begin(store.rpmRange());
   display.clearDisplay();
+  Serial.print("rpm range:");
+  Serial.println(store.rpmRange(), DEC);
+ 
   Serial.println("setup finished!");
   Timer1.start();
 }
 
-unsigned long time = 0L;
-
 void loop() {
-  drawSpeed(20);
-  drawRPM(5000);
+  panel.drawSpeed(20);
+  panel.drawRPM(5000);
+  if (g_1_hz) {
+    g_1_hz = false;
+    Serial.println("second");
+    store.writeMileage();
+    panel.drawMileage(store.mileage());
+  }
+  if (panel.update())
+    display.display();
 }
