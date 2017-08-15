@@ -37,6 +37,12 @@ void setup() {
   // initialize the state from EEPROM store
   store.begin();
 
+  // setup the backlight pwm
+  analogWrite(6, store.backlight());
+
+  // switch the SCK pin to alternate
+  SPI.setSCK(14);
+  
   // setup the lcd display
   display.begin();
   // you can change the contrast around to adapt the display
@@ -63,7 +69,6 @@ void loop() {
   panel.drawRPM(5000);
   if (g_1_hz) {
     g_1_hz = false;
-    Serial.println("second");
     store.writeMileage();
     panel.drawMileage(store.mileage());
   }
