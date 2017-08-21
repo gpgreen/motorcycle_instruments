@@ -11,6 +11,7 @@
 #include <Adafruit_PCD8544.h>
 #include <EEPROMStore.h>
 #include <MotoPanel.h>
+#include <Bounce2.h>
 
 EEPROMStore store = EEPROMStore();
 
@@ -31,6 +32,12 @@ MotoPanel panel = MotoPanel(display);
 // IntervalTimer
 IntervalTimer secTimer;
 IntervalTimer milliTimer;
+
+// the bounce object
+Bounce debouncer = Bounce();
+
+// the button pin
+const int buttonPin = 2;
 
 // flag to signal each second
 volatile bool g_1_hz = false;
@@ -78,6 +85,11 @@ void setup() {
     Serial.print("rpm range:");
     Serial.println(store.rpmRange(), DEC);
 
+    // bounce button
+    pinMode(buttonPin, INPUT);
+    debouncer.attach(buttonPin);
+    debouncer.interval(5);	// interval in ms
+
     Serial.println("setup finished!");
 
     // begin timers
@@ -85,17 +97,35 @@ void setup() {
     milliTimer.begin(everyMilliSecond, 1000);
 }
 
+// the current measured voltage
 float g_measured_voltage = 0.0f;
 
+// the last state of the button
+int lastButton = HIGH;
+
+bool updateDisplay = false;
+
 void loop() {
-    panel.drawSpeed(20);
-    panel.drawRPM(5000);
+    // update the bounce instance
+    debouncer.update();
+
+    panel.setSpeed(20);
+    panel.setRPM(5000);
     if (g_1_hz) {
 	g_1_hz = false;
+	// increment mileage for test
+	static int count = 0;
+	if (count++ == 1) {
+	    store.addMileage(1);
+	    count = 0;
+	}
+	
+	// mileage
 	store.writeMileage();
-	panel.drawMileage(store.mileage());
-	Serial.print("Voltage:");
-	Serial.println(g_measured_voltage, 2);
+	panel.setMileage(store.mileage());
+
+	// the voltage
+	panel.setVoltage(g_measured_voltage);
     }
     if (g_1000_hz) {
 	g_1000_hz = false;
@@ -104,8 +134,22 @@ void loop() {
 	// read the input voltage on pin 15
 	average_voltage(analogRead(15));
     }
-    if (panel.update())
+
+    // button test
+    int value = debouncer.read();
+    if (value == LOW) {
+	lastButton = value;
+    } else if (lastButton == LOW && value == HIGH) {
+	lastButton = value;
+	Serial.println("Button pushed");
+	panel.buttonPressed();
+    }
+
+    // check for display update
+    if (updateDisplay || panel.loopUpdate()) {
 	display.display();
+    }
+    updateDisplay = false;
 }
 
 void average_voltage(int new_reading)
@@ -116,12 +160,10 @@ void average_voltage(int new_reading)
     average[current++] = new_reading;
     if (current == count) {
 	int sum = 0;
-	for (int i=0; i<count; ++i)
+	for (int i = 0; i < count; ++i)
 	    sum += average[i];
 	g_measured_voltage = ((sum / static_cast<float>(count)) / 65535.0)
 	    * store.voltageCorrection() * 3.3;
 	current = 0;
-	//Serial.print("Voltage:");
-	//Serial.println(g_measured_voltage, 2);
     }
 }
