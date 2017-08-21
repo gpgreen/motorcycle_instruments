@@ -109,8 +109,6 @@ void loop() {
     // update the bounce instance
     debouncer.update();
 
-    panel.setSpeed(20);
-    panel.setRPM(5000);
     if (g_1_hz) {
 	g_1_hz = false;
 	// increment mileage for test
@@ -133,7 +131,35 @@ void loop() {
 	analogReadResolution(16);
 	// read the input voltage on pin 15
 	average_voltage(analogRead(15));
-    }
+
+	// change speed
+	static int scount = 0;
+	static int speed = 0;
+	static int up = 1;
+	if (scount++ == 200) {
+	    speed += up ? 1 : -1;
+	    if (speed == 99)
+		up = 0;
+	    else if (speed == 0 && up == 0)
+		up = 1;
+	    scount = 0;
+	}
+	panel.setSpeed(speed);
+
+    	// change rpm
+	static int rcount = 0;
+	static int rpm = 0;
+	static int rup = 1;
+	if (rcount++ == 210) {
+	    rpm += rup ? 100 : -100;
+	    if (rpm == store.rpmRange())
+		rup = 0;
+	    else if (rpm == 0 && rup == 0)
+		rup = 1;
+	    rcount = 0;
+	}
+	panel.setRPM(rpm);
+}
 
     // button test
     int value = debouncer.read();
