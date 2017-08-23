@@ -80,7 +80,7 @@ void setup() {
     display.display(); // show splashscreen
 
     // panel
-    panel.begin(store.rpmRange());
+    panel.begin(store.rpmRange(), store.mileage());
     display.clearDisplay();
     Serial.print("rpm range:");
     Serial.println(store.rpmRange(), DEC);
