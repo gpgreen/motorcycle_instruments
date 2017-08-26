@@ -29,14 +29,14 @@ Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 3);
 
 MotoPanel panel = MotoPanel(display);
 
-// IntervalTimer
+// IntervalTimers
 IntervalTimer secTimer;
 IntervalTimer milliTimer;
 
 // the bounce object
 Bounce debouncer = Bounce();
 
-// the PWM output for LCD backlight
+// the PWM output pin for LCD backlight
 const int backlightPin = 6;
 
 // the button pin
@@ -105,8 +105,10 @@ float g_measured_voltage = 0.0f;
 // the last state of the button
 int lastButton = HIGH;
 
+// flag to signal display update
 bool updateDisplay = false;
 
+// serial input buffer and current offset into buffer
 int bufoffset = 0;
 char inputBuffer[1024];
 
@@ -117,12 +119,10 @@ void loop() {
     // check for serial input
     if (Serial.available() > 0) {
 	inputBuffer[bufoffset++] = Serial.read();
-	//Serial.print("char:");
-	//Serial.print(inputBuffer[bufoffset-1], HEX);
-	//Serial.print(" offset:");
-	//Serial.println(bufoffset, DEC);
+	// when we get a newline, try to process command
 	if (inputBuffer[bufoffset-1] == '\n')
 	    processCommand();
+	// no buffer overflows
 	if (bufoffset == 1024)
 	    bufoffset = 0;
     }
@@ -139,10 +139,13 @@ void loop() {
 	// mileage
 	store.writeMileage();
 	panel.setMileage(store.mileage());
+	panel.setTrip1Mileage(store.trip1());
+	panel.setTrip2Mileage(store.trip2());
 
 	// the voltage
 	panel.setVoltage(g_measured_voltage);
     }
+
     if (g_1000_hz) {
 	g_1000_hz = false;
 	// set the analog resolution to max for teensy
@@ -212,12 +215,16 @@ void average_voltage(int new_reading)
     }
 }
 
+// serial input commands
+
 void cmd_mileage(int val, float fval)
 {
     if (val < 0 || val > 8000000)
 	return;
     store.setMileage(val);
     panel.setMileage(store.mileage());
+    panel.setTrip1Mileage(store.trip1());
+    panel.setTrip2Mileage(store.trip2());
 }
 
 void cmd_rpmrange(int val, float fval)
@@ -261,40 +268,59 @@ void cmd_imperial(int val, float fval)
     store.setImperial();
 }
 
+void cmd_reseteeprom(int val, float fval)
+{
+    store.initializeEEPROM();
+}
+
+// structure to dispatch commmands
 struct CommandDispatch {
     const char* name;
-    const char* valspec;
+    char valspec;
     void (*func)(int val, float fval);
 };
 
+// array of command dispatchers
 const struct CommandDispatch commands [] = {
-    {"mileage", "%d", cmd_mileage},
-    {"rpmrange", "%d", cmd_rpmrange},
-    {"contrast", "%d", cmd_contrast},
-    {"backlight", "%d", cmd_backlight},
-    {"voltage", "%f", cmd_voltage},
-    {"metric", "%d", cmd_metric},
-    {"imperial", "%d", cmd_imperial},
+    {"mileage", 'd', cmd_mileage},
+    {"rpmrange", 'd', cmd_rpmrange},
+    {"contrast", 'd', cmd_contrast},
+    {"backlight", 'd', cmd_backlight},
+    {"voltage", 'f', cmd_voltage},
+    {"metric", 'd', cmd_metric},
+    {"imperial", 'd', cmd_imperial},
+    {"reseteeprom", 'd', cmd_reseteeprom},
     {0, 0, 0},
 };
 
+// process a command received by Serial
+// command format:
+// command_name '=' command_value '\n'
+//
+// command_name is first field in command structure
+// command_value is interpreted by second field in structure:
+//   d is an integer value
+//   f is an floating point value
+//
+// when command is parsed and executed, serial input buffer is
+// reset
 void processCommand()
 {
     Serial.println("process command");
     int i = 0;
+    bool processed = false;
     while (1) {
 	if (commands[i].name == 0)
 	    break;
 	const struct CommandDispatch* cmd_struct = &commands[i++];
 	const char* cmd = cmd_struct->name;
-	const char* scanfval = cmd_struct->valspec;
 	int cmdlen = strlen(cmd);
 	Serial.println(cmd);
 	// buffer must contain command + 2 characters for a match
 	if (cmdlen > bufoffset-2)
 	    continue;
-	// set the trailing null value
-	inputBuffer[bufoffset] = 0;
+	// set the trailing null value, replacing the newline
+	inputBuffer[bufoffset-1] = 0;
 	Serial.println(inputBuffer);
 	if (strncmp(cmd, inputBuffer, cmdlen) == 0) {
 	    if (inputBuffer[cmdlen] != '=')
@@ -305,22 +331,23 @@ void processCommand()
 	    char* valptr = &inputBuffer[cmdlen+1];
 	    int val = 0;
 	    float fval = 0.0;
-	    if (strncmp(scanfval, "%d", 2) == 0) {
-		sscanf(valptr, scanfval, &val);
+	    if (cmd_struct->valspec == 'd') {
+		sscanf(valptr, "%d", &val);
 		Serial.print(" val:");
 		Serial.println(val, DEC);
 	    } else {
-		sscanf(valptr, scanfval, &fval);
+		sscanf(valptr, "%f", &fval);
 		Serial.print(" fval:");
 		Serial.println(fval, 4);
 	    }
+	    // execute the command
 	    cmd_struct->func(val, fval);
-	    // all done
-	    bufoffset = 0;
-	    return;
+	    processed = true;
+	    break;
 	}
     }
     bufoffset = 0;
-    Serial.println("unrecognized command");
+    if (!processed)
+	Serial.println("unrecognized command");
 }
 
