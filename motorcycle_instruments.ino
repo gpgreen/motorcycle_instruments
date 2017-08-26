@@ -36,6 +36,9 @@ IntervalTimer milliTimer;
 // the bounce object
 Bounce debouncer = Bounce();
 
+// the PWM output for LCD backlight
+const int backlightPin = 6;
+
 // the button pin
 const int buttonPin = 2;
 
@@ -67,7 +70,7 @@ void setup() {
     store.begin();
 
     // setup the backlight pwm
-    analogWrite(6, store.backlight());
+    analogWrite(backlightPin, store.backlight());
 
     // switch the SCK pin to alternate
     SPI.setSCK(14);
@@ -104,10 +107,26 @@ int lastButton = HIGH;
 
 bool updateDisplay = false;
 
+int bufoffset = 0;
+char inputBuffer[1024];
+
 void loop() {
     // update the bounce instance
     debouncer.update();
 
+    // check for serial input
+    if (Serial.available() > 0) {
+	inputBuffer[bufoffset++] = Serial.read();
+	//Serial.print("char:");
+	//Serial.print(inputBuffer[bufoffset-1], HEX);
+	//Serial.print(" offset:");
+	//Serial.println(bufoffset, DEC);
+	if (inputBuffer[bufoffset-1] == '\n')
+	    processCommand();
+	if (bufoffset == 1024)
+	    bufoffset = 0;
+    }
+    
     if (g_1_hz) {
 	g_1_hz = false;
 	// increment mileage for test
@@ -192,3 +211,116 @@ void average_voltage(int new_reading)
 	current = 0;
     }
 }
+
+void cmd_mileage(int val, float fval)
+{
+    if (val < 0 || val > 8000000)
+	return;
+    store.setMileage(val);
+    panel.setMileage(store.mileage());
+}
+
+void cmd_rpmrange(int val, float fval)
+{
+    if (val < 0 || val > 30000)
+	return;
+    store.setRPMRange(val);
+    panel.begin(store.rpmRange(), store.mileage());
+}
+
+void cmd_contrast(int val, float fval)
+{
+    if (val < 0 || val > 128)
+	return;
+    store.setContrast(val);
+    display.setContrast(store.contrast());
+}
+
+void cmd_backlight(int val, float fval)
+{
+    if (val < 0 || val > 256)
+	return;
+    store.setBacklight(val);
+    analogWrite(backlightPin, store.backlight());
+}
+
+void cmd_voltage(int val, float fval)
+{
+    if (fval < 0.0 || fval > 10.0)
+	return;
+    store.setVoltageCorrection(fval);
+}
+
+void cmd_metric(int val, float fval)
+{
+    store.setMetric();
+}
+
+void cmd_imperial(int val, float fval)
+{
+    store.setImperial();
+}
+
+struct CommandDispatch {
+    const char* name;
+    const char* valspec;
+    void (*func)(int val, float fval);
+};
+
+const struct CommandDispatch commands [] = {
+    {"mileage", "%d", cmd_mileage},
+    {"rpmrange", "%d", cmd_rpmrange},
+    {"contrast", "%d", cmd_contrast},
+    {"backlight", "%d", cmd_backlight},
+    {"voltage", "%f", cmd_voltage},
+    {"metric", "%d", cmd_metric},
+    {"imperial", "%d", cmd_imperial},
+    {0, 0, 0},
+};
+
+void processCommand()
+{
+    Serial.println("process command");
+    int i = 0;
+    while (1) {
+	if (commands[i].name == 0)
+	    break;
+	const struct CommandDispatch* cmd_struct = &commands[i++];
+	const char* cmd = cmd_struct->name;
+	const char* scanfval = cmd_struct->valspec;
+	int cmdlen = strlen(cmd);
+	Serial.println(cmd);
+	// buffer must contain command + 2 characters for a match
+	if (cmdlen > bufoffset-2)
+	    continue;
+	// set the trailing null value
+	inputBuffer[bufoffset] = 0;
+	Serial.println(inputBuffer);
+	if (strncmp(cmd, inputBuffer, cmdlen) == 0) {
+	    if (inputBuffer[cmdlen] != '=')
+		continue;
+	    Serial.print("Command received:");
+	    Serial.print(cmd);
+	    // extract the value from the string between = and end
+	    char* valptr = &inputBuffer[cmdlen+1];
+	    int val = 0;
+	    float fval = 0.0;
+	    if (strncmp(scanfval, "%d", 2) == 0) {
+		sscanf(valptr, scanfval, &val);
+		Serial.print(" val:");
+		Serial.println(val, DEC);
+	    } else {
+		sscanf(valptr, scanfval, &fval);
+		Serial.print(" fval:");
+		Serial.println(fval, 4);
+	    }
+	    cmd_struct->func(val, fval);
+	    // all done
+	    bufoffset = 0;
+	    return;
+	}
+    }
+    bufoffset = 0;
+    Serial.println("unrecognized command");
+}
+
