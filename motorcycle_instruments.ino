@@ -42,6 +42,9 @@ const int backlightPin = 6;
 // the button pin
 const int buttonPin = 2;
 
+// the hall effect sensor
+const int hallEffectPin = 7;
+
 // flag to signal each second
 volatile bool g_1_hz = false;
 
@@ -69,6 +72,9 @@ void setup() {
     // initialize the state from EEPROM store
     store.begin();
 
+    // setup the hall effect interrupt
+    pinMode(hallEffectPin, INPUT);
+  
     // setup the backlight pwm
     analogWrite(backlightPin, store.backlight());
 
@@ -112,9 +118,31 @@ bool updateDisplay = false;
 int bufoffset = 0;
 char inputBuffer[1024];
 
+// last state of hall effect pin
+int lastHallEffect = HIGH;
+int mag = 0;
+
 void loop() {
     // update the bounce instance
     debouncer.update();
+
+    // check the hall effect sensor
+    if (digitalRead(hallEffectPin)) {
+        if (lastHallEffect != HIGH) {
+            ++mag;
+            lastHallEffect = HIGH;
+            Serial.print("mag:");
+            Serial.println(mag);
+        }
+    }
+    else {
+        if (lastHallEffect == HIGH) {
+            ++mag;
+            lastHallEffect = LOW;
+            Serial.print("mag:");
+            Serial.println(mag);
+        }
+    }
 
     // check for serial input
     if (Serial.available() > 0) {
