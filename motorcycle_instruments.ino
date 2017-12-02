@@ -12,20 +12,23 @@
 #include <EEPROMStore.h>
 #include <MotoPanel.h>
 #include <Bounce2.h>
+#include <FreqMeasure.h>
 
 EEPROMStore store = EEPROMStore();
 
 // Hardware SPI (faster, but must use certain hardware pins):
-// SCK is LCD serial clock (SCLK) - this is pin 13 on Arduino Uno
+// SCK is LCD serial clock (SCLK) - this is pin 13 on Teensy
 //   for this application, we switch it to pin 14 the alternate (see setup)
-// MOSI is LCD DIN - this is pin 11 on an Arduino Uno
+// MOSI is LCD DIN - this is pin 11 on Teensy
+// MISO is not used - this is pin 12 on Teensy
+// CS is not used - this is pin 10 on Teensy
+// Select the following pins for the rest of the functions
 // pin 5 - Data/Command select (D/C)
 // pin 4 - LCD chip select (CS)
-// pin 3 - LCD reset (RST)
-// Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 3);
+// pin 8 - LCD reset (RST)
 // Note with hardware SPI MISO and SS pins aren't used but will still be read
 // and written to during SPI transfer.  Be careful sharing these pins!
-Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 3);
+Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 8);
 
 MotoPanel panel = MotoPanel(display);
 
@@ -42,8 +45,8 @@ const int backlightPin = 6;
 // the button pin
 const int buttonPin = 2;
 
-// the hall effect sensor
-const int hallEffectPin = 7;
+// the hall effect sensor (for FrequencyMeasure)
+const int hallEffectPin = 3;
 
 // flag to signal each second
 volatile bool g_1_hz = false;
@@ -103,6 +106,9 @@ void setup() {
     // begin timers
     secTimer.begin(everySecond, 1000000);
     milliTimer.begin(everyMilliSecond, 1000);
+
+    // initalize rpm detector
+    FreqMeasure.begin();
 }
 
 // the current measured voltage
@@ -118,31 +124,46 @@ bool updateDisplay = false;
 int bufoffset = 0;
 char inputBuffer[1024];
 
-// last state of hall effect pin
-int lastHallEffect = HIGH;
-int mag = 0;
+// hall effect sensor freq count
+double sum = 0;
+int count = 0;
+//int lastHallEffect = HIGH;
+//int mag = 0;
 
 void loop() {
     // update the bounce instance
     debouncer.update();
 
     // check the hall effect sensor
-    if (digitalRead(hallEffectPin)) {
-        if (lastHallEffect != HIGH) {
-            ++mag;
-            lastHallEffect = HIGH;
-            Serial.print("mag:");
-            Serial.println(mag);
+    if (FreqMeasure.available()) {
+        // average several readings together
+        sum = sum + FreqMeasure.read();
+        count = count + 1;
+        if (count > 30) {
+            float frequency = FreqMeasure.countToFrequency(sum / count);
+            Serial.print("freq:");
+            Serial.println(frequency);
+            sum = 0;
+            count = 0;
         }
     }
-    else {
-        if (lastHallEffect == HIGH) {
-            ++mag;
-            lastHallEffect = LOW;
-            Serial.print("mag:");
-            Serial.println(mag);
-        }
-    }
+
+    // if (digitalRead(hallEffectPin)) {
+    //     if (lastHallEffect != HIGH) {
+    //         ++mag;
+    //         lastHallEffect = HIGH;
+    //         Serial.print("mag:");
+    //         Serial.println(mag);
+    //     }
+    // }
+    // else {
+    //     if (lastHallEffect == HIGH) {
+    //         ++mag;
+    //         lastHallEffect = LOW;
+    //         Serial.print("mag:");
+    //         Serial.println(mag);
+    //     }
+    // }
 
     // check for serial input
     if (Serial.available() > 0) {
@@ -208,7 +229,7 @@ void loop() {
 	    rcount = 0;
 	}
 	panel.setRPM(rpm);
-}
+    }
 
     // button test
     int value = debouncer.read();
