@@ -117,6 +117,9 @@ float g_measured_voltage = 0.0f;
 // the last state of the button
 int lastButton = HIGH;
 
+// when the button was pressed
+unsigned long button_down_time = 0;
+
 // flag to signal display update
 bool updateDisplay = false;
 
@@ -233,12 +236,20 @@ void loop() {
 
     // button test
     int value = debouncer.read();
-    if (value == LOW) {
+    //Serial.print("Value=");
+    //Serial.println(value);
+    if (lastButton != LOW && value == LOW) {
 	lastButton = value;
+        button_down_time = millis();
     } else if (lastButton == LOW && value == HIGH) {
 	lastButton = value;
-	Serial.println("Button pushed");
-	panel.buttonPressed();
+        if ((millis() - button_down_time) > 1000) {
+            Serial.println("Button long-pressed");
+            panel.buttonLongPressed();
+        } else {
+            Serial.println("Button pressed");
+            panel.buttonPressed();
+        }
     }
 
     // check for display update
