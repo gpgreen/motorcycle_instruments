@@ -13,7 +13,7 @@
 #include <MotoPanel.h>
 #include <Bounce2.h>
 #include <FreqMeasure.h>
-
+#include <elapsedMillis.h>
 EEPROMStore store = EEPROMStore();
 
 // Hardware SPI (faster, but must use certain hardware pins):
@@ -118,7 +118,7 @@ float g_measured_voltage = 0.0f;
 int lastButton = HIGH;
 
 // when the button was pressed
-unsigned long button_down_time = 0;
+elapsedMillis button_down = 0;
 
 // flag to signal display update
 bool updateDisplay = false;
@@ -134,9 +134,6 @@ int count = 0;
 //int mag = 0;
 
 void loop() {
-    // update the bounce instance
-    debouncer.update();
-
     // check the hall effect sensor
     if (FreqMeasure.available()) {
         // average several readings together
@@ -234,16 +231,18 @@ void loop() {
 	panel.setRPM(rpm);
     }
 
+    // update the bounce instance
+    debouncer.update();
     // button test
     int value = debouncer.read();
     //Serial.print("Value=");
     //Serial.println(value);
     if (lastButton != LOW && value == LOW) {
 	lastButton = value;
-        button_down_time = millis();
+        button_down = 0;
     } else if (lastButton == LOW && value == HIGH) {
 	lastButton = value;
-        if ((millis() - button_down_time) > 1000) {
+        if (button_down > 1000) {
             Serial.println("Button long-pressed");
             panel.buttonLongPressed();
         } else {
