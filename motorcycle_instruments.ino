@@ -114,9 +114,6 @@ void setup() {
 // the current measured voltage
 float g_measured_voltage = 0.0f;
 
-// the last state of the button
-int lastButton = HIGH;
-
 // when the button was pressed
 elapsedMillis button_down = 0;
 
@@ -231,23 +228,19 @@ void loop() {
 	panel.setRPM(rpm);
     }
 
-    // update the bounce instance
-    debouncer.update();
-    // button test
-    int value = debouncer.read();
-    //Serial.print("Value=");
-    //Serial.println(value);
-    if (lastButton != LOW && value == LOW) {
-	lastButton = value;
-        button_down = 0;
-    } else if (lastButton == LOW && value == HIGH) {
-	lastButton = value;
-        if (button_down > 1000) {
-            Serial.println("Button long-pressed");
-            panel.buttonLongPressed();
-        } else {
-            Serial.println("Button pressed");
-            panel.buttonPressed();
+    // check for button state change
+    if (debouncer.update()) {
+        if (debouncer.fell()) {
+            button_down = 0;
+        }
+        if (debouncer.rose()) {
+            if (button_down > 1000) {
+                Serial.println("Button long-pressed");
+                panel.buttonLongPressed();
+            } else {
+                Serial.println("Button pressed");
+                panel.buttonPressed();
+            }
         }
     }
 
