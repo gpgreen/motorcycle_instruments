@@ -13,7 +13,8 @@
 #include <MotoPanel.h>
 #include <Bounce2.h>
 #include <FreqMeasure.h>
-#include <elapsedMillis.h>
+#include <MsTimer2.h>
+
 EEPROMStore store = EEPROMStore();
 
 // Hardware SPI (faster, but must use certain hardware pins):
@@ -23,18 +24,14 @@ EEPROMStore store = EEPROMStore();
 // MISO is not used - this is pin 12 on Teensy
 // CS is not used - this is pin 10 on Teensy
 // Select the following pins for the rest of the functions
-// pin 5 - Data/Command select (D/C)
-// pin 4 - LCD chip select (CS)
-// pin 8 - LCD reset (RST)
+// pin A1 - Data/Command select (D/C)
+// pin 10 - LCD chip select (CS)
+// pin 7 - LCD reset (RST)
 // Note with hardware SPI MISO and SS pins aren't used but will still be read
 // and written to during SPI transfer.  Be careful sharing these pins!
-Adafruit_PCD8544 display = Adafruit_PCD8544(5, 4, 8);
+Adafruit_PCD8544 display = Adafruit_PCD8544(A1, 10, 7);
 
 MotoPanel panel = MotoPanel(display);
-
-// IntervalTimers
-IntervalTimer secTimer;
-IntervalTimer milliTimer;
 
 // the bounce object
 Bounce debouncer = Bounce();
@@ -46,7 +43,10 @@ const int backlightPin = 6;
 const int buttonPin = 2;
 
 // the hall effect sensor (for FrequencyMeasure)
-const int hallEffectPin = 3;
+const int hallEffectPin = 8;
+
+// the external voltage pin
+const int extVoltage = A0;
 
 // flag to signal each second
 volatile bool g_1_hz = false;
@@ -54,35 +54,28 @@ volatile bool g_1_hz = false;
 // flag for every millisecond
 volatile bool g_1000_hz = false;
 
-// interrupt function for every second
-void everySecond()
-{
-    g_1_hz = true;
-}
-
 // interrupt function of every millisecond
 void everyMilliSecond()
 {
+    static int count = 0;
     g_1000_hz = true;
+    if (++count == 1000) {
+        g_1_hz = true;
+	count = 0;
+    }
 }
 
 void setup() {
     Serial.begin(115200);
-    while (!Serial) {
-	; // wait for serial port to connect. Needed for native USB port only
-    }
 
     // initialize the state from EEPROM store
     store.begin();
 
     // setup the hall effect interrupt
-    pinMode(hallEffectPin, INPUT);
+    //pinMode(hallEffectPin, INPUT);
   
     // setup the backlight pwm
     analogWrite(backlightPin, store.backlight());
-
-    // switch the SCK pin to alternate
-    SPI.setSCK(14);
 
     // setup the lcd display
     display.begin();
@@ -103,10 +96,10 @@ void setup() {
 
     Serial.println("setup finished!");
 
-    // begin timers
-    secTimer.begin(everySecond, 1000000);
-    milliTimer.begin(everyMilliSecond, 1000);
-
+    // begin timer (every millisecond)
+    MsTimer2::set(1, everyMilliSecond);
+    MsTimer2::start();
+    
     // initalize rpm detector
     FreqMeasure.begin();
 }
@@ -115,14 +108,14 @@ void setup() {
 float g_measured_voltage = 0.0f;
 
 // when the button was pressed
-elapsedMillis button_down = 0;
+int button_down = -1;
 
 // flag to signal display update
 bool updateDisplay = false;
 
 // serial input buffer and current offset into buffer
 int bufoffset = 0;
-char inputBuffer[1024];
+char inputBuffer[128];
 
 // hall effect sensor freq count
 double sum = 0;
@@ -194,10 +187,12 @@ void loop() {
 
     if (g_1000_hz) {
 	g_1000_hz = false;
-	// set the analog resolution to max for teensy
-	analogReadResolution(16);
-	// read the input voltage on pin 15
-	average_voltage(analogRead(15));
+  // increment button count if needed
+  if (button_down >= 0)
+      ++button_down;
+      
+	// read the external voltage
+	average_voltage(analogRead(extVoltage));
 
 	// change speed
 	static int scount = 0;
@@ -241,6 +236,7 @@ void loop() {
                 Serial.println("Button pressed");
                 panel.buttonPressed();
             }
+            button_down = -1;
         }
     }
 
