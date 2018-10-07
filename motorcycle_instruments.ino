@@ -14,6 +14,7 @@
 #include <Bounce2.h>
 #include <FreqMeasure.h>
 #include <MsTimer2.h>
+#include <AnalogDiff.h>
 
 EEPROMStore store = EEPROMStore();
 
@@ -67,7 +68,7 @@ volatile bool g_100_hz = false;
 // flag for every millisecond
 volatile bool g_1000_hz = false;
 
-// interrupt function of every millisecond
+// interrupt function called every millisecond
 void everyMilliSecond()
 {
     static int count1000 = 0;
@@ -126,7 +127,9 @@ void setup() {
     // you can change the contrast around to adapt the display
     // for the best viewing!
     display.setContrast(store.contrast());
-    display.display(); // show splashscreen
+
+    // show splashscreen
+    display.display(); 
 
     // setup the corrections to sensors based on units
     adjustForUnits();
@@ -160,6 +163,10 @@ void setup() {
     MsTimer2::start();
 
     speed_t = millis();
+
+    // show the display
+    panel.loopUpdate(true);
+    display.display();
 }
 
 // the current measured voltage
@@ -173,7 +180,7 @@ int button1_down = -1;
 int button2_down = -1;
 
 // serial input buffer and current offset into buffer
-const int bufsize = 128;
+const int bufsize = 256;
 int bufoffset = 0;
 char inputBuffer[bufsize];
 
@@ -266,7 +273,7 @@ void loop() {
         average_voltage(analogRead(extVoltage));
 
         // read the temperature
-        average_temp(analogRead(tempSensor));
+        average_temp(AnalogDiff::read());
     }
 
     if (g_1000_hz) {
@@ -305,12 +312,14 @@ void average_voltage(int new_reading)
     static const int count = 20;
     static int current = 0;
     static int average[count];
+    //Serial.print("vreading:");
+    //Serial.println(new_reading);
     average[current++] = new_reading;
     if (current == count) {
         int sum = 0;
         for (int i = 0; i < count; ++i)
             sum += average[i];
-        g_measured_voltage = ((sum / static_cast<float>(count)) / 1024.0)
+        g_measured_voltage = ((sum / static_cast<float>(count)) * 3.30 / 1024)
             * store.voltageCorrection() + store.voltageOffset();
         current = 0;
     }
@@ -321,12 +330,14 @@ void average_temp(int new_reading)
     static const int count = 20;
     static int current = 0;
     static int average[count];
+    //Serial.print("treading:");
+    //Serial.println(new_reading);
     average[current++] = new_reading;
     if (current == count) {
         int sum = 0;
         for (int i = 0; i < count; ++i)
             sum += average[i];
-        g_measured_temp = (sum / static_cast<float>(count)) * 330.0 / 1024;
+        g_measured_temp = (sum / static_cast<float>(count)) * 330 / 5120;
         g_measured_temp *= temperature_factor;
         g_measured_temp += temperature_offset;
         //Serial.print("temp:");
@@ -336,7 +347,6 @@ void average_temp(int new_reading)
 }
 
 // serial input commands
-
 void cmd_mileage(int val, float fval)
 {
     if (val < 0 || val > 8000000)
