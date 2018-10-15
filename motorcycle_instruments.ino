@@ -74,11 +74,13 @@ void everyMilliSecond()
     static int count1000 = 0;
     static int count100 = 0;
     g_1000_hz = true;
-    if (++count100 == 100) {
+    if (++count100 == 100)
+    {
         g_100_hz = true;
         count100 = 0;
     }
-    if (++count1000 == 1000) {
+    if (++count1000 == 1000)
+    {
         g_1_hz = true;
         count1000 = 0;
     }
@@ -102,10 +104,13 @@ const float tire_dia = 2.0f;
 
 void adjustForUnits()
 {
-    if (store.isMetric()) {
+    if (store.isMetric())
+    {
         Serial.println("Speedometer in metric units");
         distance_factor = 3.14159 * tire_dia / 3.2808 / 1000.0;
-    } else {
+    }
+    else
+    {
         Serial.println("Speedometer in imperial units");
         temperature_factor = 9.0 / 5.0;
         temperature_offset = 32.0;
@@ -113,7 +118,8 @@ void adjustForUnits()
     }
 }
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
 
     // initialize the state from EEPROM store
@@ -188,13 +194,16 @@ char inputBuffer[bufsize];
 double sum = 0;
 int count = 0;
 
-void loop() {
+void loop()
+{
     // check the rpm frequency
-    if (FreqMeasure.available()) {
+    if (FreqMeasure.available())
+    {
         // average several readings together
         sum = sum + FreqMeasure.read();
         count = count + 1;
-        if (count > 30) {
+        if (count > 30)
+        {
             float rpm = FreqMeasure.countToFrequency(sum / count) / 60;
             Serial.print("rpm:");
             Serial.println(rpm);
@@ -205,7 +214,8 @@ void loop() {
     }
 
     // check for serial input
-    if (Serial.available() > 0) {
+    if (Serial.available() > 0)
+    {
         inputBuffer[bufoffset++] = Serial.read();
         // when we get a newline, try to process command
         if (inputBuffer[bufoffset-1] == '\n')
@@ -215,13 +225,15 @@ void loop() {
             bufoffset = 0;
     }
     
-    if (g_1_hz) {
+    if (g_1_hz)
+    {
         g_1_hz = false;
         
         static int scount = 0;
         static unsigned long s_last_stored = 0L;
         
-        if (++scount == 1) {
+        if (++scount == 1)
+        {
             // current time
             unsigned long t1 = millis();
             // how many revs since last check
@@ -235,7 +247,8 @@ void loop() {
             float distance = count * store.speedoCorrection() * distance_factor;
             g_distance_from_on += distance;
             unsigned long new_mileage = static_cast<unsigned long>(g_distance_from_on * 10);
-            if (new_mileage != s_last_stored) {
+            if (new_mileage != s_last_stored)
+            {
                 store.addMileage(new_mileage - s_last_stored);
                 s_last_stored = new_mileage;
             }
@@ -276,7 +289,8 @@ void loop() {
         average_temp(AnalogDiff::read());
     }
 
-    if (g_1000_hz) {
+    if (g_1000_hz)
+    {
         g_1000_hz = false;
 
         // increment button count if needed
@@ -285,11 +299,14 @@ void loop() {
     }
 
     // check for button state change
-    if (debouncer1.update()) {
-        if (debouncer1.fell()) {
+    if (debouncer1.update())
+    {
+        if (debouncer1.fell())
+        {
             button1_down = 0;
         }
-        if (debouncer1.rose()) {
+        if (debouncer1.rose())
+        {
             if (button1_down > 1000) {
                 Serial.println("Button1 long-pressed");
                 panel.buttonLongPressed();
@@ -302,7 +319,8 @@ void loop() {
     }
 
     // check for display update
-    if (panel.loopUpdate()) {
+    if (panel.loopUpdate())
+    {
         display.display();
     }
 }
@@ -315,7 +333,8 @@ void average_voltage(int new_reading)
     //Serial.print("vreading:");
     //Serial.println(new_reading);
     average[current++] = new_reading;
-    if (current == count) {
+    if (current == count)
+    {
         int sum = 0;
         for (int i = 0; i < count; ++i)
             sum += average[i];
@@ -333,7 +352,8 @@ void average_temp(int new_reading)
     //Serial.print("treading:");
     //Serial.println(new_reading);
     average[current++] = new_reading;
-    if (current == count) {
+    if (current == count)
+    {
         int sum = 0;
         for (int i = 0; i < count; ++i)
             sum += average[i];
@@ -349,7 +369,7 @@ void average_temp(int new_reading)
 // serial input commands
 void cmd_mileage(int val, float fval)
 {
-    if (val < 0 || val > 8000000)
+    if (val < 0 || val > 9000000)
         return;
     store.setMileage(val);
     panel.setMileage(store.mileage());
@@ -375,7 +395,7 @@ void cmd_contrast(int val, float fval)
 
 void cmd_backlight(int val, float fval)
 {
-    if (val < 0 || val > 256)
+    if (val < 0 || val > 255)
         return;
     store.setBacklight(val);
     analogWrite(backlightPin, store.backlight());
@@ -418,14 +438,16 @@ void cmd_reseteeprom(int val, float fval)
 }
 
 // structure to dispatch commmands
-struct CommandDispatch {
+struct CommandDispatch
+{
     const char* name;
     char valspec;
     void (*func)(int val, float fval);
 };
 
 // array of command dispatchers
-const struct CommandDispatch commands [] = {
+const struct CommandDispatch commands [] =
+{
     {"mileage", 'd', cmd_mileage},
     {"rpmrange", 'd', cmd_rpmrange},
     {"contrast", 'd', cmd_contrast},
@@ -455,7 +477,8 @@ void processCommand()
     Serial.println("process command");
     int i = 0;
     bool processed = false;
-    while (1) {
+    while (1)
+    {
         if (commands[i].name == 0)
             break;
         const struct CommandDispatch* cmd_struct = &commands[i++];
@@ -468,7 +491,8 @@ void processCommand()
         // set the trailing null value, replacing the newline
         inputBuffer[bufoffset-1] = 0;
         Serial.println(inputBuffer);
-        if (strncmp(cmd, inputBuffer, cmdlen) == 0) {
+        if (strncmp(cmd, inputBuffer, cmdlen) == 0)
+        {
             if (inputBuffer[cmdlen] != '=')
                 continue;
             Serial.print("Command received:");
@@ -477,11 +501,14 @@ void processCommand()
             char* valptr = &inputBuffer[cmdlen+1];
             int val = 0;
             float fval = 0.0;
-            if (cmd_struct->valspec == 'd') {
+            if (cmd_struct->valspec == 'd')
+            {
                 sscanf(valptr, "%d", &val);
                 Serial.print(" val:");
                 Serial.println(val, DEC);
-            } else {
+            }
+            else
+            {
                 sscanf(valptr, "%f", &fval);
                 Serial.print(" fval:");
                 Serial.println(fval, 4);
