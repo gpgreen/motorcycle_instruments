@@ -17,14 +17,14 @@ The project uses several external libraries that don't come with Arduino:
 
 - Adafruit-GFX-Library
 - Adafruit-PCD8544-Nokia-5110-LCD-library
-- [AnalogDiff(http://www.github.com/gpgreen/AnalogDiff)]
+- [AnalogDiff](http://www.github.com/gpgreen/AnalogDiff)
 - Bounce2
-- [EEPROMStore(http://www.github.com/gpgreen/EEPROMStore)]
+- [EEPROMStore](http://www.github.com/gpgreen/EEPROMStore)
 - elapsedMillis
 - FreqMeasure
-- [MotoPanel(http://www.github.com/gpgreen/MotoPanel)]
+- [MotoPanel](http://www.github.com/gpgreen/MotoPanel)
 - MsTimer2
 
 The hardware design for the project resides on github also.
 
-[Speedometer pcb project(http://www.github.com/gpgreen/speedometer_hardware)]
+[Speedometer pcb project](http://www.github.com/gpgreen/speedometer_hardware)
